@@ -1,0 +1,101 @@
+import capitals
+
+from capitals import Dictionary, Board
+
+# Dictionary Tests
+def test_dictionary_from_list_len():
+    new_dict = Dictionary.from_list(["a", "b", "c"])
+    assert len(new_dict) == 3
+
+def test_dictionary_from_list_contains():
+    new_dict = Dictionary.from_list(["a", "b", "c"])
+    assert new_dict.contains("A")
+    assert new_dict.contains("a")
+
+def test_dictionary_from_list_no_contains():
+    new_dict = Dictionary.from_list(["a", "b", "c"])
+    assert not new_dict.contains("x")
+    assert not new_dict.contains("~")
+
+
+# Position tests
+def test_valid_position():
+    assert capitals.valid_position((0, 0))
+    assert capitals.valid_position((1, 0))
+    assert capitals.valid_position(capitals.RED_START_POS)
+    assert capitals.valid_position(capitals.BLUE_START_POS)
+
+def test_invalid_position():
+    assert not capitals.valid_position((-1, 0))
+    assert not capitals.valid_position((0, -1))
+    assert not capitals.valid_position((0, 8))
+    assert not capitals.valid_position((0, 7))
+
+def test_all_valid_positions():
+    for position in capitals.valid_positions():
+        assert capitals.valid_position(position)
+
+def test_adjacent_positions():
+    assert set(capitals.adjacent_positions((0, 0))) == set([(1, 0), (0, 1), (1, 1)])
+    assert set(capitals.adjacent_positions((2, 2))) == set([(1, 2), (3, 2), (2, 1), (2, 3), (1, 1), (3, 3)])
+
+# Board tests
+def test_empty_board_get_tile():
+    board = Board()
+
+    assert board.get_tile((0, 0)) == capitals.EMPTY
+    assert board.get_tile((1, 0)) == capitals.EMPTY
+
+    try:
+        board.get_tile((-1, 0))
+        assert False
+    except:
+        # Should throw a ValueException
+        pass
+
+def test_board_set_tile():
+    board = Board()
+    board = board.set_tile((0, 0), capitals.RED)
+    board = board.set_tile((1, 0), capitals.BLUE)
+
+    assert board.get_tile((0, 0)) == capitals.RED
+    assert board.get_tile((1, 0)) == capitals.BLUE
+
+def test_board_find_single_None():
+    board = Board()
+
+    assert board.find_single(capitals.RED_CAPITAL) is None
+    assert board.find_single(capitals.RED) is None
+
+def test_board_find_single():
+    board = Board({ (0, 0): capitals.RED, (3, 4): capitals.RED_CAPITAL })
+
+    assert board.find_single(capitals.RED) == (0, 0)
+    assert board.find_single(capitals.RED_CAPITAL) == (3, 4)
+
+def test_board_find_all():
+    board = Board({ (0, 0): capitals.RED, (1, 0): capitals.RED, (3, 4): capitals.RED, (3, 5): capitals.RED_CAPITAL })
+
+    assert set(board.find_all(capitals.RED)) == set([(0, 0), (1, 0), (3, 4)])
+    assert set(board.find_all(capitals.RED_CAPITAL)) == set([(3, 5)])
+
+def test_board_find_all_letters():
+    board = Board({ (0, 0): capitals.RED, (1, 0): "LETTER_X", (1, 1): "LETTER_Q", (3, 4): "LETTER_Z" })
+
+    assert board.find_all_letters() == { (1, 0): "X", (1, 1): "Q", (3, 4): "Z" }
+
+def test_board_floodfill():
+    board = Board({ (0, 0): capitals.RED, (1, 0): capitals.RED_CAPITAL, (1, 1): capitals.RED, (0, 2): capitals.BLUE,
+                    (1, 2): capitals.BLUE, (2, 2): capitals.RED, (3, 2): capitals.RED, (5, 7): capitals.RED })
+
+    assert board.floodfill((0, 0), lambda p, t: t == capitals.RED or t == capitals.RED_CAPITAL) \
+        == set([(0, 0), (1, 0), (1, 1), (2, 2), (3, 2)])
+    assert board.floodfill((5, 7), lambda p, t: t == capitals.RED or t == capitals.RED_CAPITAL) \
+        == set([(5, 7)])
+
+def test_board_get_letter():
+    board = Board({ (0, 0): capitals.RED, (1, 0): "LETTER_X", (1, 1): "LETTER_Z" })
+
+    assert board.get_letter((0, 0)) is None
+    assert board.get_letter((1, 0)) == "X"
+    assert board.get_letter((1, 1)) == "Z"

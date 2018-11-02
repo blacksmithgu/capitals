@@ -1,6 +1,6 @@
 import capitals
 
-from capitals import Dictionary, Board
+from capitals import Dictionary, Board, LetterGenerator
 
 # Dictionary Tests
 def test_dictionary_from_list_len():
@@ -99,3 +99,25 @@ def test_board_get_letter():
     assert board.get_letter((0, 0)) is None
     assert board.get_letter((1, 0)) == "X"
     assert board.get_letter((1, 1)) == "Z"
+
+def test_board_use_tiles():
+    board = Board({ (0, 0): capitals.RED, (1, 0): capitals.RED_CAPITAL, (0, 1): "LETTER_X", (1, 1): "LETTER_Q", (0, 2):
+        capitals.BLUE_CAPITAL, (4, 3): capitals.RED })
+
+    new_board, capital_cap = board.use_tiles([(0, 1), (1, 1)], capitals.BLUE, LetterGenerator())
+    assert new_board.get_tile((0, 0)).startswith(capitals.LETTER_PREFIX)
+    assert new_board.get_tile((1, 0)).startswith(capitals.LETTER_PREFIX)
+    assert new_board.get_tile((0, 1)) == capitals.BLUE
+    assert new_board.get_tile((1, 1)) == capitals.BLUE
+    assert capital_cap
+
+    assert set(new_board.find_all_matching(lambda p, t: t == capitals.RED or t == capitals.RED_CAPITAL)) == set([(4, 3)])
+
+def test_board_use_tiles2():
+    board = Board({ (3, 3): capitals.BLUE, (2, 2): capitals.RED_CAPITAL, (2, 3): capitals.RED, (3, 2): "LETTER_A" })
+
+    new_board, capital_cap = board.use_tiles([(3, 2)], capitals.RED, LetterGenerator())
+    assert new_board.get_tile((3, 2)) == capitals.RED
+    assert new_board.get_tile((2, 2)) == capitals.RED_CAPITAL
+    assert new_board.get_tile((3, 3)).startswith(capitals.LETTER_PREFIX)
+    assert not capital_cap

@@ -186,15 +186,15 @@ class Board(object):
         """
         Return the position of all tiles which have the given type.
         """
-        return self.find_all_matching(lambda t: t == tile_type)
+        return self.find_all_matching(lambda p, t: t == tile_type)
 
     def find_all_matching(self, predicate):
         """
-        Return the position of all types which return True when passed to the given predicate.
+        Return the position of all (pos, tile_type) pairs which return True when passed to the given predicate.
         """
         positions = []
         for pos in valid_positions():
-            if predicate(self.get_tile(pos)):
+            if predicate(pos, self.get_tile(pos)):
                 positions.append(pos)
 
         return positions
@@ -203,7 +203,7 @@ class Board(object):
         """
         Return a map of positions -> letter at that position, for all of the letters on the board.
         """
-        letter_positions = self.find_all_matching(lambda k: k.startswith(LETTER_PREFIX))
+        letter_positions = self.find_all_matching(lambda p, t: t.startswith(LETTER_PREFIX))
         return { pos: self.get_tile(pos)[len(LETTER_PREFIX):] for pos in letter_positions }
 
     def floodfill(self, start, predicate):
@@ -262,7 +262,7 @@ class Board(object):
         else:
             return None
 
-    def apply_tiles(self, tiles, player, lettergen):
+    def use_tiles(self, tiles, player, lettergen):
         """
         Given a list of tiles and the player who selected those tiles:
         - Finds all of the tiles connected to the players territory (either directly or via other selected tiles), and adds them to the players territory.
@@ -289,7 +289,7 @@ class Board(object):
         tiles = set(tiles)
         connected_tiles = set()
         for tile in tiles:
-            flood_tiles = self.floodfill(tile, lambda p, t: t == player or t == (player + "_CAPITAL") or t in tiles)
+            flood_tiles = self.floodfill(tile, lambda p, t: t == player or t == (player + "_CAPITAL") or p in tiles)
             is_connected = any(map(lambda k: self.get_tile(k) == player or self.get_tile(k) == (player + "_CAPITAL"), flood_tiles))
 
             if is_connected:
@@ -299,16 +299,20 @@ class Board(object):
         # - Connected tiles become player territory, and all tiles adjacent to them which were enemy territory become letter tiles.
         # - Disconnected tiles just become a new letter.
         result = self
+        captured_capital = False
         for tile in tiles:
             if tile in connected_tiles:
                 result = result.set_tile(tile, player)
                 for adj in adjacent_positions(tile):
-                    if result.get_tile(adj) == enemy or result.get_tile(adj) == enemy_capital:
+                    if result.get_tile(adj) == enemy:
                         result = result.set_tile(adj, LETTER_PREFIX + lettergen.sample())
+                    elif result.get_tile(adj) == enemy_capital:
+                        result = result.set_tile(adj, LETTER_PREFIX + lettergen.sample())
+                        captured_capital = True
             else:
                 result = result.set_tile(tile, LETTER_PREFIX + lettergen.sample())
 
-        return (result, result.find_single(enemy_capital) is None)
+        return (result, captured_capital)
 
 
 class State(object):

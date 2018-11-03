@@ -320,7 +320,7 @@ class State(object):
     A state of the game of Capitals.
     """
 
-    def __init__(self, dictionary, lettergen, board = Board(), turn = "RED", round = 1):
+    def __init__(self, dictionary, lettergen, board = Board(), turn = "RED", round = 1, enemy_capital_captured = False):
         """
         Create a new game state. The board should be a Board instance; the turn should be
         "RED" for the red player, or "BLUE" for the blue player.
@@ -332,16 +332,64 @@ class State(object):
         self.round = round
 
     @staticmethod
-    def initial(dictionary, lettergen):
+    def initial(dictionary, lettergen = LetterGenerator()):
         """
         Compute the initial game state as the game starts.
         """
         board = Board.initial(lettergen)
         return State(dictionary, lettergen, board)
 
+    def winner(self):
+        """
+        Returns the winner (RED or BLUE) if a winner is apparent; otherwise, returns None.
+        """
+        if len(self.board.find_all_matching(lambda p, t: t == RED or t == RED_CAPITAL)) == 0:
+            return BLUE
+        elif len(self.board.find_all_matching(lambda p, t: t == BLUE or t == BLUE_CAPITAL)) == 0:
+            return RED
+        else:
+            return None
+
+    def next_turn(self, next_board, capital_captured):
+        """
+        Return a new state with a new game board; automatically increments the turn and round appropriately
+        depend on whether or not the capital was captured.
+        """
+        increment_round = capital_captured or (self.turn == BLUE)
+        next_player = self.turn if capital_captured else (RED if self.turn == BLUE else BLUE)
+        next_round = self.round + 1 if increment_round else self.round
+        return State(self.dictionary, self.lettergen, next_board, next_player, next_round)
+
     def act(self, played_positions):
         """
         Takes an action for the given player's turn (consisting of a list of board positions to take), returning a new
         GameState with the result if successful, or an error (TODO) if the action fails.
         """
-        pass
+        # To act, first collect all of the played positions and check that they are in bounds and form a word.
+        word = ""
+        for position in played_positions:
+            letter = self.board.get_letter(position)
+            if letter is None:
+                raise ValueError("Invalid play: position " + repr(position) + " is not a letter!")
+
+            word += letter
+
+        # Check that the letter forms a valid word.
+        if not self.dictionary.contains(word):
+            raise ValueError("Invalid play: word '" + word + "' is not a word in the dictionary!")
+
+        # Check if the enemy has a capital; if they don't, we'll try to give them a new one after this turn ends.
+        enemy_has_capital = (self.board.red_capital() if self.turn == BLUE else self.board.blue_capital()) is not None
+
+        # Everything seems to be in order, go ahead and swap the tiles.
+        new_board, capital_captured = self.board.use_tiles(played_positions, self.turn, self.lettergen)
+
+        # If the enemy didn't have a capital, choose a new spot for it from their normal colored spots.
+        enemy = (RED if self.turn == BLUE else BLUE)
+        enemy_spots = self.board.find_all(enemy)
+        if len(enemy_spots) > 0:
+            position = random.choice(enemy_spots)
+            new_board = new_board.set_tile(position, enemy + "_CAPITAL")
+
+        return self.next_turn(new_board, capital_captured)
+

@@ -1,6 +1,6 @@
 import capitals
 
-from capitals import Dictionary, Board, LetterGenerator
+from capitals import Dictionary, Board, State, LetterGenerator
 
 # Dictionary Tests
 def test_dictionary_from_list_len():
@@ -121,3 +121,34 @@ def test_board_use_tiles2():
     assert new_board.get_tile((2, 2)) == capitals.RED_CAPITAL
     assert new_board.get_tile((3, 3)).startswith(capitals.LETTER_PREFIX)
     assert not capital_cap
+
+# Game State tests
+def test_state_next_turn():
+    dictionary = Dictionary.from_list(["a", "ab", "abc", "abcd"])
+    state = State.initial(dictionary)
+
+    assert state.turn == capitals.RED
+    assert state.round == 1
+
+    state = state.next_turn(state.board, False)
+    assert state.turn == capitals.BLUE
+    assert state.round == 1
+
+    state = state.next_turn(state.board, False)
+    assert state.turn == capitals.RED
+    assert state.round == 2
+
+def test_state_next_turn_capital_captured():
+    dictionary = Dictionary.from_list(["a", "ab", "abc", "abcd"])
+    state = State.initial(dictionary)
+
+    assert state.turn == capitals.RED
+    assert state.round == 1
+
+    state = state.next_turn(state.board, True)
+    assert state.turn == capitals.RED
+    assert state.round == 2
+
+    state = state.next_turn(state.board, True)
+    assert state.turn == capitals.RED
+    assert state.round == 3

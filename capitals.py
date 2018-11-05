@@ -320,7 +320,7 @@ class State(object):
     A state of the game of Capitals.
     """
 
-    def __init__(self, dictionary, lettergen, board = Board(), turn = "RED", round = 1, enemy_capital_captured = False):
+    def __init__(self, dictionary, board = Board(), lettergen = LetterGenerator(), turn = "RED", round = 1, enemy_capital_captured = False):
         """
         Create a new game state. The board should be a Board instance; the turn should be
         "RED" for the red player, or "BLUE" for the blue player.
@@ -337,7 +337,7 @@ class State(object):
         Compute the initial game state as the game starts.
         """
         board = Board.initial(lettergen)
-        return State(dictionary, lettergen, board)
+        return State(dictionary, board, lettergen)
 
     def winner(self):
         """
@@ -358,7 +358,7 @@ class State(object):
         increment_round = capital_captured or (self.turn == BLUE)
         next_player = self.turn if capital_captured else (RED if self.turn == BLUE else BLUE)
         next_round = self.round + 1 if increment_round else self.round
-        return State(self.dictionary, self.lettergen, next_board, next_player, next_round)
+        return State(self.dictionary, next_board, self.lettergen, next_player, next_round)
 
     def act(self, played_positions):
         """
@@ -385,11 +385,12 @@ class State(object):
         new_board, capital_captured = self.board.use_tiles(played_positions, self.turn, self.lettergen)
 
         # If the enemy didn't have a capital, choose a new spot for it from their normal colored spots.
-        enemy = (RED if self.turn == BLUE else BLUE)
-        enemy_spots = self.board.find_all(enemy)
-        if len(enemy_spots) > 0:
-            position = random.choice(enemy_spots)
-            new_board = new_board.set_tile(position, enemy + "_CAPITAL")
+        if not enemy_has_capital:
+            enemy = (RED if self.turn == BLUE else BLUE)
+            enemy_spots = self.board.find_all(enemy)
+            if len(enemy_spots) > 0:
+                position = random.choice(enemy_spots)
+                new_board = new_board.set_tile(position, enemy + "_CAPITAL")
 
         return self.next_turn(new_board, capital_captured)
 

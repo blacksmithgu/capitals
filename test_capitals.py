@@ -152,3 +152,32 @@ def test_state_next_turn_capital_captured():
     state = state.next_turn(state.board, True)
     assert state.turn == capitals.RED
     assert state.round == 3
+
+def test_state_winner():
+    dictionary = Dictionary.from_list(["a", "ab", "abc", "abcd"])
+    board = Board({ (2, 2): capitals.RED_CAPITAL, (2, 3): capitals.BLUE_CAPITAL, (3, 3): "LETTER_A", (5, 5): "LETTER_A" })
+    state = State(dictionary, board)
+
+    # Red goes first, have them win.
+    state_red_win = state.act([(3, 3)])
+    assert state_red_win.winner() == capitals.RED
+
+    # Now, have red do nothing useful and then have blue win.
+    state_blue_win = state.act([(5, 5)]).act([(3, 3)])
+    assert state_blue_win.winner() == capitals.BLUE
+
+def test_state_capture_capital():
+    dictionary = Dictionary.from_list(["a", "ab", "abc", "abcd"])
+    board = Board({ (2, 2): capitals.RED_CAPITAL, (1, 1): capitals.RED, (3, 3): "LETTER_A", (4, 4):
+        capitals.BLUE_CAPITAL, (5, 5): capitals.BLUE, (3, 5): "LETTER_A" })
+    state = State(dictionary, board)
+
+    # Have red capture the capital - we should get another turn.
+    state_red = state.act([(3, 3)])
+    assert state_red.turn == capitals.RED
+    assert state_red.board.get_tile((4, 4)).startswith(capitals.LETTER_PREFIX)
+    assert state_red.board.blue_capital() is None
+
+    # Have red waste the turn; we should see a blue capital show up again.
+    state_red2 = state_red.act([(3, 5)])
+    assert state_red2.board.blue_capital() == (5, 5)

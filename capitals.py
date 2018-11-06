@@ -58,7 +58,7 @@ class LetterGenerator(object):
         for letter, weight in self.letter_dist:
             self.letters_dup += [letter] * weight
 
-    def sample(self):
+    def __call__(self):
         """
         Randomly sample a letter from the letter distribution.
         """
@@ -152,10 +152,10 @@ class Board(object):
         board[BLUE_START_POS] = BLUE_CAPITAL
 
         for adj in adjacent_positions(RED_START_POS):
-            board[adj] = LETTER_PREFIX + lettergen.sample()
+            board[adj] = LETTER_PREFIX + lettergen()
 
         for adj in adjacent_positions(BLUE_START_POS):
-            board[adj] = LETTER_PREFIX + lettergen.sample()
+            board[adj] = LETTER_PREFIX + lettergen()
 
         return Board(board)
 
@@ -305,12 +305,12 @@ class Board(object):
                 result = result.set_tile(tile, player)
                 for adj in adjacent_positions(tile):
                     if result.get_tile(adj) == enemy:
-                        result = result.set_tile(adj, LETTER_PREFIX + lettergen.sample())
+                        result = result.set_tile(adj, LETTER_PREFIX + lettergen())
                     elif result.get_tile(adj) == enemy_capital:
-                        result = result.set_tile(adj, LETTER_PREFIX + lettergen.sample())
+                        result = result.set_tile(adj, LETTER_PREFIX + lettergen())
                         captured_capital = True
             else:
-                result = result.set_tile(tile, LETTER_PREFIX + lettergen.sample())
+                result = result.set_tile(tile, LETTER_PREFIX + lettergen())
 
         return (result, captured_capital)
 
@@ -394,3 +394,16 @@ class State(object):
 
         return self.next_turn(new_board, capital_captured)
 
+class Agent(object):
+    """
+    AI for a game of capitals; takes the current game state as input, returns the action it would like to take.
+    Agents which try to take invalid actions will have their turn skipped.
+    """
+    def __init__(self):
+        pass
+
+    def act(self, state):
+        """
+        Examines the current state and returns a list of positions which it would like to play on.
+        """
+        pass

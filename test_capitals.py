@@ -212,8 +212,6 @@ def run_through_game():
             if let not in letters:
                 letters[let] = 0
             letters[let] += 1
-        print(letters)
-        print(len(dictionary.words))
         temp = []
         for word in dictionary.words:
             if (len(word)>3):

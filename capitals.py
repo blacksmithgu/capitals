@@ -141,11 +141,17 @@ class Board(object):
     """
 
     def __init__(self, board = None):
-        self.board = board or {}
+        # Initialize the board with all empties.
+        self.board = { pos: EMPTY for pos in valid_positions() }
 
-        for pos, tile_type in self.board.items():
+        # Copy over the tiles in the given board, throwing an error if any of them are out of bounds.
+        # TODO: Also check they're valid tile types!
+        board = board or {}
+        for pos, tile_type in board.items():
             if not valid_position(pos):
                 raise ValueError("Passed invalid position " + repr(pos) + " to board constructor")
+            else:
+                self.board[pos] = tile_type
 
     @staticmethod
     def initial(lettergen):
@@ -309,7 +315,7 @@ class Board(object):
             if tile in connected_tiles:
                 result = result.set_tile(tile, player)
                 for adj in adjacent_positions(tile):
-                    if result.get_tile(adj) == enemy:
+                    if result.get_tile(adj) == enemy or result.get_tile(adj) == EMPTY:
                         result = result.set_tile(adj, LETTER_PREFIX + lettergen())
                     elif result.get_tile(adj) == enemy_capital:
                         result = result.set_tile(adj, LETTER_PREFIX + lettergen())
@@ -416,6 +422,7 @@ class State(object):
 
 
         return self.next_turn(new_board, capital_captured)
+
 
 class Agent(object):
     """

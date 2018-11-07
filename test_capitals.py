@@ -121,8 +121,20 @@ def test_board_use_tiles2():
     new_board, capital_cap = board.use_tiles([(3, 2)], capitals.RED, LetterGenerator())
     assert new_board.get_tile((3, 2)) == capitals.RED
     assert new_board.get_tile((2, 2)) == capitals.RED_CAPITAL
-    assert new_board.get_tile((3, 3)).startswith(capitals.LETTER_PREFIX)
+    assert new_board.get_letter((3, 3)) is not None
     assert not capital_cap
+
+def test_board_use_tiles3():
+    # Test that we replace EMPTY tiles with letter tiles around newly taken territory.
+    board = Board({ (3, 3): capitals.BLUE, (4, 4): "LETTER_X" })
+
+    new_board, capital_cap = board.use_tiles([(4, 4)], capitals.BLUE, LetterGenerator())
+    assert new_board.get_tile((4, 4)) == capitals.BLUE
+    for pos in capitals.adjacent_positions((4, 4)):
+        if pos == (3, 3):
+            continue
+
+        assert new_board.get_letter(pos) is not None
 
 # Game State tests
 def test_state_next_turn():

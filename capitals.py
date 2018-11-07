@@ -2,6 +2,9 @@
 # Implementation of the Capitals mobile game, with an API amenable to use in AI.
 
 import random
+import _pickle as pickle
+import codecs
+import csv
 
 from collections import deque
 
@@ -26,11 +29,13 @@ class Dictionary(object):
     def from_file(file_name):
         """
         Load a dictionary from a dictionary file, which should consist of one word per line.
+        Filters out any word containing an apostrophe
         """
         words = set()
         with open(file_name, "r") as dict_file:
             for line in dict_file:
-                words.add(line.upper())
+                if "'" not in line:
+                    words.add(line.upper().rstrip())
 
         return Dictionary(words)
 
@@ -309,6 +314,8 @@ class Board(object):
                     elif result.get_tile(adj) == enemy_capital:
                         result = result.set_tile(adj, LETTER_PREFIX + lettergen())
                         captured_capital = True
+                    elif result.get_tile(adj) == EMPTY:
+                        result = result.set_tile(adj, LETTER_PREFIX + lettergen())
             else:
                 result = result.set_tile(tile, LETTER_PREFIX + lettergen())
 
@@ -360,6 +367,17 @@ class State(object):
         next_round = self.round + 1 if increment_round else self.round
         return State(self.dictionary, next_board, self.lettergen, next_player, next_round)
 
+    def write_board_action(self, board, played_positions, word):
+        """
+        Writes the board state and action to a file to be visualized with a GUI
+        """
+        info = [board, played_positions, word]
+        f = open("game1.log", "a+")
+        pickled = codecs.encode(pickle.dumps(info), "base64").decode()
+        writer = csv.writer(f, delimiter='\n')
+        writer.writerow([pickled])
+
+
     def act(self, played_positions):
         """
         Takes an action for the given player's turn (consisting of a list of board positions to take), returning a new
@@ -378,6 +396,9 @@ class State(object):
         if not self.dictionary.contains(word):
             raise ValueError("Invalid play: word '" + word + "' is not a word in the dictionary!")
 
+        # Writes the board and action to file
+        self.write_board_action(self.board, played_positions, word)
+
         # Check if the enemy has a capital; if they don't, we'll try to give them a new one after this turn ends.
         enemy_has_capital = (self.board.red_capital() if self.turn == BLUE else self.board.blue_capital()) is not None
 
@@ -391,6 +412,8 @@ class State(object):
             if len(enemy_spots) > 0:
                 position = random.choice(enemy_spots)
                 new_board = new_board.set_tile(position, enemy + "_CAPITAL")
+
+
 
         return self.next_turn(new_board, capital_captured)
 

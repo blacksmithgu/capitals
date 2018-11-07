@@ -260,7 +260,6 @@ class Board(object):
                 return EMPTY
             else:
                 raise IndexError("Position " + repr(position) + " is not a valid board position")
-
         return self.board[position]
 
     def get_letter(self, position):
@@ -363,6 +362,20 @@ class State(object):
         else:
             return None
 
+    def winner(self, board):
+        """
+        Returns the winner (RED or BLUE) if a winner is apparent; otherwise, returns None.
+        """
+        numBlue = len(board.find_all_matching(lambda p, t: t == RED or t == RED_CAPITAL))
+        numRed = len(board.find_all_matching(lambda p, t: t == BLUE or t == BLUE_CAPITAL))
+        if numBlue == 0:
+            return BLUE
+        elif numRed == 0:
+            return RED
+        else:
+            return None
+            #return (numBlue, numRed)
+
     def next_turn(self, next_board, capital_captured):
         """
         Return a new state with a new game board; automatically increments the turn and round appropriately
@@ -371,7 +384,14 @@ class State(object):
         increment_round = capital_captured or (self.turn == BLUE)
         next_player = self.turn if capital_captured else (RED if self.turn == BLUE else BLUE)
         next_round = self.round + 1 if increment_round else self.round
-        return State(self.dictionary, next_board, self.lettergen, next_player, next_round)
+        newState =  State(self.dictionary, next_board, self.lettergen, next_player, next_round)
+        """
+        if newState.winner() != None:
+            print("WINNERR")
+            return None
+        return newState
+        """
+        return newState
 
     def write_board_action(self, board, played_positions, word):
         """
@@ -411,10 +431,14 @@ class State(object):
         # Everything seems to be in order, go ahead and swap the tiles.
         new_board, capital_captured = self.board.use_tiles(played_positions, self.turn, self.lettergen)
 
+        # print(self.winner(new_board))
+        if self.winner(new_board) != None:
+            return self.winner(new_board)
+
         # If the enemy didn't have a capital, choose a new spot for it from their normal colored spots.
         if not enemy_has_capital:
             enemy = (RED if self.turn == BLUE else BLUE)
-            enemy_spots = self.board.find_all(enemy)
+            enemy_spots = new_board.find_all(enemy)
             if len(enemy_spots) > 0:
                 position = random.choice(enemy_spots)
                 new_board = new_board.set_tile(position, enemy + "_CAPITAL")

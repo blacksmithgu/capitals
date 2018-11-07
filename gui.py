@@ -189,7 +189,8 @@ class App(Tk):
                         self.textDict[r][c] = text_id
 
     def click(self, evt):
-        self.can.itemconfigure(self.hexDict[0][0].tags, fill=COLOR_EMPTY)
+        # self.can.itemconfigure(self.hexDict[0][0].tags, fill=COLOR_EMPTY)
+        pass
 
     def leftKey(self, event):
         self.index = max(self.index-1,0)

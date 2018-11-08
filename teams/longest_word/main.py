@@ -68,8 +68,6 @@ class LongestWordAgent(cap.Agent):
         if word_to_play is None:
             return None
 
-        print("[longest_word-%s] Playing word %s" % (state.turn, word_to_play))
-
         # Compute positions for the letters; a somewhat hacky way to do it.
         positions_to_play = []
         for letter in word_to_play:

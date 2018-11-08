@@ -4,3 +4,6 @@ __pycache__
 
 # Editor stuff
 *.swp
+
+# Code outputs
+*.json

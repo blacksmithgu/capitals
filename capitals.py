@@ -2,9 +2,8 @@
 # Implementation of the Capitals mobile game, with an API amenable to use in AI.
 
 import random
-import _pickle as pickle
-import codecs
-import csv
+import re
+import json
 
 from collections import deque
 
@@ -18,6 +17,9 @@ class Dictionary(object):
 
     def __len__(self):
         return len(self.words)
+
+    def __iter__(self):
+        return self.words.__iter__()
 
     def contains(self, word):
         """
@@ -34,15 +36,17 @@ class Dictionary(object):
         words = set()
         with open(file_name, "r") as dict_file:
             for line in dict_file:
-                if "'" not in line:
-                    words.add(line.upper().rstrip())
+                line = line.strip()
+                if "'" not in line and len(line) >= 3:
+                    words.add(line.upper())
 
         return Dictionary(words)
 
     @staticmethod
     def from_list(word_list):
         """
-        Load a dictionary from a Python list.
+        Load a dictionary from a Python list or other iterable object; note that this function
+        does not do any sanitation of the input words, and may potentially allow otherwise illegal words.
         """
         return Dictionary(set(map(lambda k: k.upper(), word_list)))
 
@@ -170,6 +174,32 @@ class Board(object):
 
         return Board(board)
 
+    # Regex used to parse positions (<num>, <num>)
+    POSITION_REGEX = re.compile("\\((\\d+),\\s*(\\d+)\\)")
+
+    @staticmethod
+    def from_json(json):
+        """
+        Create a board object from a raw JSON-loaded map.
+        """
+        board = {}
+        for entry, value in json.items():
+            match = Board.POSITION_REGEX.match(entry)
+            if not match:
+                raise ValueError("Invalid board JSON map: %s" % repr(json))
+            else:
+                position = (int(match.group(1)), int(match.group(2)))
+                board[position] = value
+
+        return Board(board)
+
+    @staticmethod
+    def to_json(board):
+        """
+        Create a json-ifiable map from a board.
+        """
+        return { repr(pos): board.board[pos] for pos in filter(lambda k: board.board[k] != "EMPTY", board.board) }
+
     def red_capital(self):
         """
         Return the position of the red capital, or None if there is no capital.
@@ -272,6 +302,20 @@ class Board(object):
         else:
             return None
 
+    def get_word(self, positions):
+        """
+        Get the word corresponding to the given letter positions.
+        """
+        word = ""
+        for position in positions:
+            letter = self.get_letter(position)
+            if letter is None:
+                return None
+            else:
+                word += letter
+
+        return word
+
     def use_tiles(self, tiles, player, lettergen):
         """
         Given a list of tiles and the player who selected those tiles:
@@ -319,8 +363,6 @@ class Board(object):
                     elif result.get_tile(adj) == enemy_capital:
                         result = result.set_tile(adj, LETTER_PREFIX + lettergen())
                         captured_capital = True
-                    elif result.get_tile(adj) == EMPTY:
-                        result = result.set_tile(adj, LETTER_PREFIX + lettergen())
             else:
                 result = result.set_tile(tile, LETTER_PREFIX + lettergen())
 
@@ -332,7 +374,7 @@ class State(object):
     A state of the game of Capitals.
     """
 
-    def __init__(self, dictionary, board = Board(), lettergen = LetterGenerator(), turn = "RED", round = 1, enemy_capital_captured = False):
+    def __init__(self, dictionary, board = Board(), lettergen = LetterGenerator(), turn = "RED", round = 1):
         """
         Create a new game state. The board should be a Board instance; the turn should be
         "RED" for the red player, or "BLUE" for the blue player.
@@ -351,6 +393,21 @@ class State(object):
         board = Board.initial(lettergen)
         return State(dictionary, board, lettergen)
 
+    @staticmethod
+    def from_json(json, dictionary, lettergen):
+        """
+        Parse a state object from JSON.
+        """
+        board = Board.from_json(json["board"])
+        return State(dictionary, board, lettergen, json["turn"], int(json["round"]))
+
+    @staticmethod
+    def to_json(state):
+        """
+        Convert a state object to a JSON-friendly map.
+        """
+        return { "board": Board.to_json(state.board), "turn": state.turn, "round": state.round }
+
     def winner(self):
         """
         Returns the winner (RED or BLUE) if a winner is apparent; otherwise, returns None.
@@ -362,20 +419,6 @@ class State(object):
         else:
             return None
 
-    def winner(self, board):
-        """
-        Returns the winner (RED or BLUE) if a winner is apparent; otherwise, returns None.
-        """
-        numBlue = len(board.find_all_matching(lambda p, t: t == RED or t == RED_CAPITAL))
-        numRed = len(board.find_all_matching(lambda p, t: t == BLUE or t == BLUE_CAPITAL))
-        if numBlue == 0:
-            return BLUE
-        elif numRed == 0:
-            return RED
-        else:
-            return None
-            #return (numBlue, numRed)
-
     def next_turn(self, next_board, capital_captured):
         """
         Return a new state with a new game board; automatically increments the turn and round appropriately
@@ -384,25 +427,7 @@ class State(object):
         increment_round = capital_captured or (self.turn == BLUE)
         next_player = self.turn if capital_captured else (RED if self.turn == BLUE else BLUE)
         next_round = self.round + 1 if increment_round else self.round
-        newState =  State(self.dictionary, next_board, self.lettergen, next_player, next_round)
-        """
-        if newState.winner() != None:
-            print("WINNERR")
-            return None
-        return newState
-        """
-        return newState
-
-    def write_board_action(self, board, played_positions, word):
-        """
-        Writes the board state and action to a file to be visualized with a GUI
-        """
-        info = [board, played_positions, word]
-        f = open("game1.log", "a+")
-        pickled = codecs.encode(pickle.dumps(info), "base64").decode()
-        writer = csv.writer(f, delimiter='\n')
-        writer.writerow([pickled])
-
+        return State(self.dictionary, next_board, self.lettergen, next_player, next_round)
 
     def act(self, played_positions):
         """
@@ -410,30 +435,18 @@ class State(object):
         GameState with the result if successful, or an error (TODO) if the action fails.
         """
         # To act, first collect all of the played positions and check that they are in bounds and form a word.
-        word = ""
-        for position in played_positions:
-            letter = self.board.get_letter(position)
-            if letter is None:
-                raise ValueError("Invalid play: position " + repr(position) + " is not a letter!")
+        word = self.board.get_word(played_positions)
+        if word is None:
+            raise ValueError("Invalid positions " + repr(played_positions) + " - at least one is not a letter!")
 
-            word += letter
-
-        # Check that the letter forms a valid word.
         if not self.dictionary.contains(word):
             raise ValueError("Invalid play: word '" + word + "' is not a word in the dictionary!")
-
-        # Writes the board and action to file
-        self.write_board_action(self.board, played_positions, word)
 
         # Check if the enemy has a capital; if they don't, we'll try to give them a new one after this turn ends.
         enemy_has_capital = (self.board.red_capital() if self.turn == BLUE else self.board.blue_capital()) is not None
 
         # Everything seems to be in order, go ahead and swap the tiles.
         new_board, capital_captured = self.board.use_tiles(played_positions, self.turn, self.lettergen)
-
-        # print(self.winner(new_board))
-        if self.winner(new_board) != None:
-            return self.winner(new_board)
 
         # If the enemy didn't have a capital, choose a new spot for it from their normal colored spots.
         if not enemy_has_capital:
@@ -443,9 +456,117 @@ class State(object):
                 position = random.choice(enemy_spots)
                 new_board = new_board.set_tile(position, enemy + "_CAPITAL")
 
-
-
         return self.next_turn(new_board, capital_captured)
+
+
+class GameLog(object):
+    """
+    A mutable log of an entire game, consisting of a series of states and actions.
+    """
+    def __init__(self, states, actions):
+        self.states = states
+        self.actions = actions
+
+    @staticmethod
+    def initial(initial_state):
+        """
+        Create an "initial" game log which starts with only a single initial state.
+        """
+        return GameLog([initial_state], [])
+
+    @staticmethod
+    def from_json(json, dictionary, lettergen):
+        """
+        Load a game log from JSON.
+        """
+        states = [State.from_json(state, dictionary, lettergen) for state in json["states"]]
+
+        actions = []
+        for action in json["actions"]:
+            if action is None:
+                actions.append(action)
+                continue
+
+            result = []
+            for string in action:
+                match = Board.POSITION_REGEX.match(string)
+                if not match:
+                    raise ValueError("Invalid position string %s" % string)
+
+                result.append((int(match.group(1)), int(match.group(2))))
+
+            actions.append(result)
+
+        return GameLog(states, actions)
+
+    @staticmethod
+    def from_file(file_name, dictionary, lettergen):
+        """
+        Load a game log directly from a log file.
+        """
+        with open(file_name, "r") as logfile:
+            return GameLog.from_json(json.load(logfile), dictionary, lettergen)
+
+    @staticmethod
+    def to_json(log):
+        """
+        Convert a game log to a json-ifiable string.
+        """
+        return {
+            "states": [State.to_json(state) for state in log.states],
+            "actions": [(None if action is None else [repr(pos) for pos in action]) for action in log.actions]
+        }
+
+    @staticmethod
+    def to_file(log, file_name):
+        """
+        Write a game log directly to a log file.
+        """
+        with open(file_name, "w") as logfile:
+            json.dump(GameLog.to_json(log), logfile, sort_keys=True, indent=4)
+
+    def add_turn(self, action, new_state):
+        """
+        Add the given turn to the log.
+        """
+        self.actions.append(action)
+        self.states.append(new_state)
+
+    def act(self, action):
+        """
+        Acts on the latest state in the log, returning the same output that the state.act() function returns;
+        appends the action and state to the game log.
+        """
+        state = self.states[-1].act(action)
+        self.add_turn(action, state)
+        return state
+
+    def winner(self):
+        """
+        The winner of this game log, if any.
+        """
+        return self.states[-1].winner()
+
+    def current_turn(self):
+        """
+        Return whose turn it is (RED for player red, BLUE for player blue)
+        """
+        return self.states[-1].turn
+
+    def current_state(self):
+        """
+        Return the current state of the game.
+        """
+        return self.states[-1]
+
+    def current_round(self):
+        """
+        Return the current round of the game.
+        """
+        return self.states[-1].round
+
+    def __len__(self):
+        return len(self.actions)
 
 
 class Agent(object):

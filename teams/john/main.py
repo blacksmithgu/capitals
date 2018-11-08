@@ -20,10 +20,11 @@ def getMove(state, dictionary, player):
         letters[let] += 1
     temp = []
     bestAction = []
-    bestActionScore = 0
+    bestActionScore = -10000
+    words = []
     for word in dictionary.words:
         action = []
-        if (len(word) > 3):
+        if (len(word) > 1):
             word = word.rstrip()
             # print(word.rstrip())
             word_count = {}
@@ -38,17 +39,39 @@ def getMove(state, dictionary, player):
                     break
             if valid:
                 myWord = word
+                words.append(word)
+                word_arr = []
+
                 for character in myWord:
+                    let_arr = []
                     for pos in lets:
-                        if lets[pos] == character and pos not in action:
-                            action.append(pos)
-                            break
-                score = scoreMove(state,action, player)
-                if (score>bestActionScore):
-                    bestAction = action
-                    bestActionScore = score
-    # print(bestActionScore)
-    return bestAction if len(bestAction) > 0 else None
+                        if lets[pos] == character:
+                            let_arr.append(pos)
+                    word_arr.append(let_arr)
+
+                word_pos_list = []
+                getAllWords(word_arr, word_pos_list, [], 0)
+                for word in word_pos_list:
+                    score = scoreMove(state,word, player)
+                    if (score>bestActionScore):
+                        bestAction = word
+                        bestActionScore = score
+    return bestAction
+
+def getAllWords(word_arr, word_list, temp, start):
+    if len(word_arr) == len(temp):
+        word_list.append(temp)
+    else:
+        for idx in range(start, len(word_arr)):
+            for i in range(len(word_arr[idx])):
+                temp2 = []
+                for let in temp:
+                    temp2.append(let)
+                if (word_arr[idx][i] not in temp2):
+                    temp2.append(word_arr[idx][i])
+                    getAllWords(word_arr, word_list, temp2, idx+1)
+
+
 
 def scoreMove(state, action, player):
     # return len(action)
@@ -75,7 +98,7 @@ def scoreMove(state, action, player):
     # - Connected tiles become player territory, and all tiles adjacent to them which were enemy territory become letter tiles.
     # - Disconnected tiles just become a new letter.
     result = state.board
-
+    vulnurable = 0
     flipped = set()
 
     captured_capital = False
@@ -87,7 +110,7 @@ def scoreMove(state, action, player):
             for adj in cap.adjacent_positions(tile):
                 if result.get_tile(adj) == enemy or result.get_tile(adj) == EMPTY:
                     flipped.add(adj)
-                elif result.get_tile(adj) == enemy_capital and captured<10000-1:
+                elif result.get_tile(adj) == enemy_capital and captured<10000-500:
                     captured+=10000
                     captured_capital = True
                 elif result.get_tile(adj) == EMPTY:
@@ -95,10 +118,21 @@ def scoreMove(state, action, player):
         else:
             # result = result.set_tile(tile, LETTER_PREFIX + lettergen())
             pass
+    cap_guard = cap.adjacent_positions(state.board.find_single(player_capital))
+    # print(enemyCap, state.board.find_single(player_capital))
+    for adj in cap_guard:
+        """
+        if result.get_tile(adj) != player:
+            print(result.get_tile(adj), player)
+            vulnurable -= 100
+        """
+        if adj in tiles:
+            vulnurable+=100
+
     captured += len(flipped)
     if enemyCap == None:
         return captured
-    return captured+newTiles
+    return captured+newTiles+vulnurable
 
 class JohnAgent(object):
     def __init__(self):

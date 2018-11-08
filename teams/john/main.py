@@ -48,7 +48,7 @@ def getMove(state, dictionary, player):
                     bestAction = action
                     bestActionScore = score
     # print(bestActionScore)
-    return bestAction
+    return bestAction if len(bestAction) > 0 else None
 
 def scoreMove(state, action, player):
     # return len(action)
@@ -100,26 +100,9 @@ def scoreMove(state, action, player):
         return captured
     return captured+newTiles
 
+class JohnAgent(object):
+    def __init__(self):
+        pass
 
-def run_through_game():
-    fo = open("game1.log", "w+")
-    fo.truncate()
-    dictionary = Dictionary.from_file("dict.txt")
-
-    games = 100
-    redWin = 0
-    for game in range(games):
-        board = Board()
-        board = board.initial(LetterGenerator())
-        state = State(dictionary, board)
-        for turns in range(100):
-            if state == RED or state == BLUE:
-                print(state)
-                if (state==RED):
-                    redWin+=1
-                break
-            action = getMove(state, dictionary, state.turn)
-            state = state.act(action)
-    print(redWin, games-redWin)
-
-run_through_game()
+    def act(self, state):
+        return getMove(state, state.dictionary, state.turn)

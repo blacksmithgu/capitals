@@ -16,12 +16,6 @@ COLOR_BLUE_CAPITAL = "#000066"
 COLOR_SHADE = "#a6a6a6"
 # ------------------------------------------------------------------------------
 class Field:
-    types = {
-        "grass": "#000000",
-        "water": "#60ace6",
-        "moutain": "#a1603a"
-    }
-
     def __init__(self, parent, x, y, kind, size):
         self.parent = parent
         self.x = x
@@ -127,7 +121,10 @@ class App(Tk):
         self.log_index = 0
         self.action_index = 0
         self.title = self.can.create_text(250,40,text="")
+        self.game_id = self.can.create_text(450, 20, text="Game 0")
         self.round = self.can.create_text(450, 40, text="0")
+        self.red_name = self.can.create_text(150, 460, text="unknown", fill=COLOR_RED)
+        self.blue_name = self.can.create_text(350, 460, text="unknown", fill=COLOR_BLUE)
         self.logs = logs
 
         self.updateHex()
@@ -187,6 +184,9 @@ class App(Tk):
         board = state.board
         self.can.itemconfigure(self.title, text="")
         self.can.itemconfigure(self.round, text=(str(state.round) + " - " + state.turn))
+        self.can.itemconfigure(self.game_id, text="Game " + str(self.log_index))
+        self.can.itemconfigure(self.red_name, text=self.logs[self.log_index].red_name)
+        self.can.itemconfigure(self.blue_name, text=self.logs[self.log_index].blue_name)
 
         for pos in capitals.valid_positions():
             tile_type = board.get_tile(pos)

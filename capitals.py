@@ -462,17 +462,20 @@ class State(object):
 class GameLog(object):
     """
     A mutable log of an entire game, consisting of a series of states and actions.
+    Also contains some extra metadata about the competitors in the game.
     """
-    def __init__(self, states, actions):
+    def __init__(self, states, actions, red_name, blue_name):
         self.states = states
         self.actions = actions
+        self.red_name = red_name
+        self.blue_name = blue_name
 
     @staticmethod
-    def initial(initial_state):
+    def initial(initial_state, red_name, blue_name):
         """
         Create an "initial" game log which starts with only a single initial state.
         """
-        return GameLog([initial_state], [])
+        return GameLog([initial_state], [], red_name, blue_name)
 
     @staticmethod
     def from_json(json, dictionary, lettergen):
@@ -497,7 +500,7 @@ class GameLog(object):
 
             actions.append(result)
 
-        return GameLog(states, actions)
+        return GameLog(states, actions, json["red"], json["blue"])
 
     @staticmethod
     def from_file(file_name, dictionary, lettergen):
@@ -514,7 +517,9 @@ class GameLog(object):
         """
         return {
             "states": [State.to_json(state) for state in log.states],
-            "actions": [(None if action is None else [repr(pos) for pos in action]) for action in log.actions]
+            "actions": [(None if action is None else [repr(pos) for pos in action]) for action in log.actions],
+            "red": log.red_name,
+            "blue": log.blue_name
         }
 
     @staticmethod

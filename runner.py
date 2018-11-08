@@ -4,6 +4,7 @@
 
 import os
 import sys
+import signal
 import importlib
 import argparse
 import capitals
@@ -41,15 +42,35 @@ class Competitor(object):
         except:
             raise ValueError("Fail to import configuration at " + (module + ".config"))
 
+class TimedOutException(Exception):
+    """
+    Trivial exception type which is thrown when an action times out.
+    """
+    pass
 
-def run_game(red_competitor, blue_competitor, dictionary, max_rounds=100, verbose=True, logfile=None):
+def call_with_timeout(timeout, func, *args):
+    """
+    Calls a function with a given amount of timeout; if the function times out, a TimedOutException is raised.
+    Note that this timeout functionality only works on unix machines.
+    """
+    def handler(signum, frame):
+        raise TimedOutException()
+
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout)
+    result = func(*args)
+    signal.alarm(0)
+
+    return result
+
+def run_game(red_competitor, blue_competitor, dictionary, max_rounds=100, turn_timeout=10, verbose=True, logfile=None):
     """
     Run a game of capitals between two competitors. Returns the winner (either RED for the red competitor or BLUE for
     the blue competitor), and the game log.
 
     If logfile is specified, then the game log is dumped to the given log file as well.
     """
-    game_log = GameLog.initial(State.initial(dictionary))
+    game_log = GameLog.initial(State.initial(dictionary), red_competitor.name, blue_competitor.name)
 
     red_agent = red_competitor.create_agent()
     blue_agent = blue_competitor.create_agent()
@@ -60,27 +81,39 @@ def run_game(red_competitor, blue_competitor, dictionary, max_rounds=100, verbos
         state = game_log.current_state()
         competitor = red_competitor if state.turn == capitals.RED else blue_competitor
         agent = red_agent if state.turn == capitals.RED else blue_agent
-        action = agent.act(state)
+
+        action = None
+        timeout = False
+        try:
+            action = call_with_timeout(turn_timeout, agent.act, state)
+        except TimedOutException:
+            timeout = True
 
         # Skip agents who forgo their turn.
         if action is None:
             if verbose:
-                print("[%s (%s)] SKIPPED TURN" % (competitor.name, state.turn))
+                if not timeout:
+                    print("[%s (%s)] SKIPPED TURN" % (competitor.name, state.turn))
+                else:
+                    print("[%s (%s)] TIMED OUT" % (competitor.name, state.turn))
 
-            turn_skips += 1
+            turn_skips += 1 if not timeout else 0
             game_log.add_turn(None, state.next_turn(state.board, False))
-
-            # If both agents skipped their turn, the game state must be broken, so kill the board.
-            if turn_skips >= 2:
-                break
-
-            continue
         else:
-            if verbose:
-                print("[%s (%s)] PLAYING '%s'" % (competitor.name, state.turn, state.board.get_word(action)))
+            try:
+                game_log.act(action)
+                turn_skips = 0
+                if verbose:
+                    print("[%s (%s)] PLAYING '%s'" % (competitor.name, state.turn, state.board.get_word(action)))
+            except:
+                if verbose:
+                    print("[%s (%s)] INVALID PLAY at positions %s" % (competitor.name, state.turn, repr(action)))
+                turn_skips += 1
 
-            turn_skips = 0
-            game_log.act(action)
+        # If both agents skipped their turn twice (due to invalid board state, not timeouts), the game state must be
+        # broken, so kill the board.
+        if turn_skips >= 4:
+            break
 
     # Dump the log to the log file, if it's not none.
     if logfile is not None:
@@ -89,7 +122,7 @@ def run_game(red_competitor, blue_competitor, dictionary, max_rounds=100, verbos
     return game_log.winner(), game_log
 
 
-def run_series(competitor1, competitor2, dictionary, num_games=5, max_rounds=100, verbose=True, logdir=None):
+def run_series(competitor1, competitor2, dictionary, num_games=5, turn_timeout=10, max_rounds=100, verbose=True, logdir=None):
     """
     Runs a series of games between two competitors, returning the number of wins for each competitor as a tuple of
     (competitor1Wins, competitor2Wins, ties), as well as a list of game logs.
@@ -104,13 +137,14 @@ def run_series(competitor1, competitor2, dictionary, num_games=5, max_rounds=100
     wins = [0, 0, 0]
     logs = []
     for game_num in range(num_games):
-        print()
-        print("== GAME %d == " % game_num)
+        if verbose:
+            print()
+            print("== GAME %d == " % game_num)
         # TODO: Lots of code duplication, relatively suboptimal.
         logfile = os.path.join(logdir, str(game_num) + ".json") if logdir is not None else None
         if game_num % 2 == 0:
             winner, log = run_game(competitor1, competitor2, dictionary, max_rounds=max_rounds, verbose=verbose,
-                    logfile=logfile)
+                    turn_timeout=turn_timeout, logfile=logfile)
 
             logs.append(log)
             if winner == capitals.RED:
@@ -141,6 +175,7 @@ if __name__ == "__main__":
     argparser.add_argument("--max_rounds", type=int, default=100, help="Maximum number of rounds per game")
     argparser.add_argument("--games", type=int, default=5, help="Number of games to run")
     argparser.add_argument("--logdir", type=str, default=None, help="Directory to dump log files to")
+    argparser.add_argument("--turn_timeout", type=int, default=10, help="Number of seconds allowed per turn")
     args = argparser.parse_args()
 
     dictionary = Dictionary.from_file("dict.txt")
@@ -162,7 +197,7 @@ if __name__ == "__main__":
 
     print("Game Series: %s vs. %s (%d games, %d rounds/game)" % (first_agent.name, second_agent.name, args.games, args.max_rounds))
     scores, logs = run_series(first_agent, second_agent, dictionary, num_games=args.games, max_rounds=args.max_rounds,
-            logdir=args.logdir)
+            turn_timeout=args.turn_timeout, logdir=args.logdir)
 
     print()
     print("== FINAL SCORES ==")

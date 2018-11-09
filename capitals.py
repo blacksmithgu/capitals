@@ -316,7 +316,7 @@ class Board(object):
 
         return word
 
-    def use_tiles(self, tiles, player, lettergen):
+    def use_tiles(self, tiles, player, lettergen = LetterGenerator()):
         """
         Given a list of tiles and the player who selected those tiles:
         - Finds all of the tiles connected to the players territory (either directly or via other selected tiles), and adds them to the players territory.

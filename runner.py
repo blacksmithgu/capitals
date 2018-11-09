@@ -97,7 +97,7 @@ def run_game(red_competitor, blue_competitor, dictionary, max_rounds=100, turn_t
                 else:
                     print("[%s (%s)] TIMED OUT" % (competitor.name, state.turn))
 
-            turn_skips += 1 if not timeout else 0
+            turn_skips += 1
             game_log.add_turn(None, state.next_turn(state.board, False))
         else:
             try:
@@ -109,6 +109,7 @@ def run_game(red_competitor, blue_competitor, dictionary, max_rounds=100, turn_t
                 if verbose:
                     print("[%s (%s)] INVALID PLAY at positions %s" % (competitor.name, state.turn, repr(action)))
                 turn_skips += 1
+                game_log.add_turn(None, state.next_turn(state.board, False))
 
         # If both agents skipped their turn twice (due to invalid board state, not timeouts), the game state must be
         # broken, so kill the board.

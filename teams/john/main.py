@@ -87,7 +87,7 @@ def scoreMove(state, action, player):
     tiles = set(tiles)
     connected_tiles = set()
     for tile in tiles:
-        flood_tiles = state.board.floodfill(tile, lambda p, t: t == player or t == (player + "_CAPITAL") or p in tiles)
+        flood_tiles = state.board.floodfill([tile], lambda p, t: t == player or t == (player + "_CAPITAL") or p in tiles)
         is_connected = any(
             map(lambda k: state.board.get_tile(k) == player or state.board.get_tile(k) == (player + "_CAPITAL"), flood_tiles))
 

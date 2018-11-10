@@ -135,6 +135,12 @@ def adjacent_positions(pos):
 
     return result
 
+def enemy_color(color):
+    """
+    Return the color of the enemy, given your team's color.
+    """
+    return RED if color == BLUE else BLUE
+
 class Board(object):
     """
     A game board of Capitals; contains methods for finding valid positions/adjacent positions, and tracks
@@ -212,6 +218,21 @@ class Board(object):
         """
         return self.find_single(BLUE_CAPITAL)
 
+    def capital(self, color):
+        """
+        Returns the capital of the given color.
+        """
+        if color == RED:
+            return self.red_capital()
+        else:
+            return self.blue_capital()
+
+    def territory(self, color):
+        """
+        Returns all of the territory tiles for the given team color.
+        """
+        return self.find_all_matching(lambda p, t: t == color or t == color + "_CAPITAL")
+
     def find_single(self, tile_type):
         """
         Return the position of a tile which has the given tile type; no gauruntees are made about
@@ -247,15 +268,15 @@ class Board(object):
         letter_positions = self.find_all_matching(lambda p, t: t.startswith(LETTER_PREFIX))
         return { pos: self.get_tile(pos)[len(LETTER_PREFIX):] for pos in letter_positions }
 
-    def floodfill(self, start, predicate):
+    def floodfill(self, starts, predicate):
         """
-        Performs a flood-fill starting at position <start>, using the given predicate on every adjacent (position,
+        Performs a flood-fill starting at positions <start>, using the given predicate on every adjacent (position,
         tile_type); if the predicate is True, the flood-fill will extend to that position.
 
         Returns a set of all of the visited positions in the flood-fill.
         """
-        visited = set([start])
-        queued = deque([start])
+        visited = set(starts)
+        queued = deque(starts)
 
         while len(queued) > 0:
             pos = queued.popleft()
@@ -343,11 +364,16 @@ class Board(object):
         tiles = set(tiles)
         connected_tiles = set()
         for tile in tiles:
-            flood_tiles = self.floodfill(tile, lambda p, t: t == player or t == (player + "_CAPITAL") or p in tiles)
+            if tile in connected_tiles:
+                continue
+
+            flood_tiles = self.floodfill([tile], lambda p, t: t == player or t == (player + "_CAPITAL") or p in tiles)
             is_connected = any(map(lambda k: self.get_tile(k) == player or self.get_tile(k) == (player + "_CAPITAL"), flood_tiles))
 
             if is_connected:
-                connected_tiles.add(tile)
+                for tile in flood_tiles:
+                    if tile in tiles:
+                        connected_tiles.add(tile)
 
         # Now that we have a set of connected tiles:
         # - Connected tiles become player territory, and all tiles adjacent to them which were enemy territory become letter tiles.

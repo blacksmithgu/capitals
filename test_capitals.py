@@ -90,9 +90,9 @@ def test_board_floodfill():
     board = Board({ (0, 0): capitals.RED, (1, 0): capitals.RED_CAPITAL, (1, 1): capitals.RED, (0, 2): capitals.BLUE,
                     (1, 2): capitals.BLUE, (2, 2): capitals.RED, (3, 2): capitals.RED, (5, 7): capitals.RED })
 
-    assert board.floodfill((0, 0), lambda p, t: t == capitals.RED or t == capitals.RED_CAPITAL) \
+    assert board.floodfill([(0, 0)], lambda p, t: t == capitals.RED or t == capitals.RED_CAPITAL) \
         == set([(0, 0), (1, 0), (1, 1), (2, 2), (3, 2)])
-    assert board.floodfill((5, 7), lambda p, t: t == capitals.RED or t == capitals.RED_CAPITAL) \
+    assert board.floodfill([(5, 7)], lambda p, t: t == capitals.RED or t == capitals.RED_CAPITAL) \
         == set([(5, 7)])
 
 def test_board_get_letter():

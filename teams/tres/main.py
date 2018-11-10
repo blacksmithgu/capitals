@@ -1,4 +1,5 @@
 import random
+import copy
 import capitals as cap
 
 from collections import deque
@@ -58,82 +59,156 @@ def reorder_tiles(board, tiles, word):
 
     return ordered_tiles
 
-def choose_tiles_maximizing_territory(board, team, letters_to_pos, word, word_freq):
+def complete_word(letters_to_pos, partial_soln, remaining_freq):
     """
-    Heuristically chooses tiles on the board which maximize the amount of territory gained. Assumes that the
-    word in word freq can be created via tiles on the board.
+    Completes a word, choosing tiles from the letter -> position mappings which are not in the partial solution
+    and which satisfy the remaining needed letter frequencies. Returns a complete solution which contains both
+    the partial solution and the extra added tiles.
     """
-    # This first pass is a greedy approach, which assigns distance scores to every letter tile on the board;
-    # tiles unreachable from our territory are assigned a score of 20 to de-incentize choosing them.
-    enemy_team = cap.RED if team == cap.BLUE else cap.BLUE
+    result = set(partial_soln)
+    for letter, freq in remaining_freq.items():
+        needed = freq
+        for pos in letters_to_pos[letter]:
+            # If we found enough letters, quit.
+            if needed == 0:
+                break
 
-    # Compute the distance scores for reachable letters from our territory.
-    scores = {}
-    team_tiles = board.find_all_matching(lambda p, t: t == team or t == team + "_CAPITAL")
-    closed = set(team_tiles)
-    queue = deque([(tile, 0) for tile in team_tiles])
-    while queue:
-        elem, dist = queue.popleft()
-        scores[elem] = dist
-
-        for adj in cap.adjacent_positions(elem):
-            if adj in closed:
+            # Skip positions already in the partial solution, of course.
+            if pos in partial_soln:
                 continue
 
-            letter = board.get_letter(adj)
-            if letter is not None and letter in word_freq:
-                queue.append((adj, dist + 1))
-                closed.add(adj)
+            result.add(pos)
+            needed -= 1
 
-    # Invert the map into distance -> [words at that distace]
-    distance_to_tiles = invert_map(scores)
+    return result
 
-    # Select as many letters as possible from distance 1, then reachable letters from distance 2, etc.
-    selected_tiles = set()
-    reachable_tiles = set(distance_to_tiles[1] if 1 in distance_to_tiles else [])
-    remaining_frequency = dict(word_freq)
+def score_board(board, team):
+    """
+    From the Bot definition, provides a score which scales with the following characteristics:
+    - Killing the enemy by claiming all territory.
+    - Claiming the enemy capital, in order to gain a free round.
+    - Protecting the local capital from adjacent + connected tiles.
+    - Maximize territory gain: i.e., maximize local territory.
+    - Minimizing enemy territory: i.e., minimize territory that the enemy holds.
+    - TODO: Minimizing letter-adjacency: i.e., minimize number of territory tiles that are adjacent to letter tiles.
+    """
+    enemy = cap.enemy_color(team)
+    our_territory = board.territory(team)
+    our_capital = board.capital(team)
 
-    for dist in distance_to_tiles:
-        # For each distance, select as many reachable letters as possible.
-        random.shuffle(distance_to_tiles[dist])
-        for tile in distance_to_tiles[dist]:
-            letter = board.get_letter(tile)
+    enemy_territory = board.territory(enemy)
+    enemy_capital = board.capital(enemy)
 
-            # If the tile is reachable & in the remaining frequency, add it and update the frequency.
-            if tile in reachable_tiles and letter in remaining_frequency:
-                selected_tiles.add(tile)
+    enemy_reachable_letters = set(board.floodfill(enemy_territory, lambda p, t: t == enemy or t == enemy + "_CAPITAL" or t.startswith(cap.LETTER_PREFIX)))
 
-                # Update the remaining frequency counts.
-                remaining_frequency[letter] -= 1
-                if remaining_frequency[letter] == 0:
-                    del remaining_frequency[letter]
+    # First Heuristic: If enemy has no territory, assign maximum score.
+    if len(enemy_territory) == 0:
+        return 99999999
 
-                # Add new reachable tiles.
-                reachable_tiles = reachable_tiles | set(cap.adjacent_positions(tile))
+    # The rest of the heuristics are additive.
+    score = 0
 
-            # Quit if we've finished finding all letters.
-            if len(remaining_frequency) == 0:
-                break
+    # Second Heuristic: If there is no enemy capital (because we capture it).
+    if enemy_capital is None:
+        score += 100
 
-    # At this point, we just need to complete the word using the un-selected tiles.
-    for letter in remaining_frequency:
-        num_remaining = remaining_frequency[letter]
-        for pos in letters_to_pos[letter]:
-            if pos not in selected_tiles:
-                selected_tiles.add(pos)
-                num_remaining -= 1
+    # Third Heuristic: The local capital should not have tiles which are reachable from enemy territory.
+    if our_capital is not None:
+        for adj in cap.adjacent_positions(our_capital):
+            if adj in enemy_reachable_letters:
+                score -= 20
+            elif board.get_tile(adj).startswith(cap.LETTER_PREFIX):
+                score -= 4
 
-            if num_remaining == 0:
-                break
+    # Fourth Heuristic: We should maximize our own territory.
+    score += 2 * len(our_territory)
 
-    # TODO: More advanced statistics requested.
-    new_board, capital_captured = board.use_tiles(selected_tiles, team, lambda: "LETTER_A")
-    return reorder_tiles(board, selected_tiles, word), \
-            (len(selected_tiles), len(board.find_all_matching(lambda p, t: t == enemy_team or t == enemy_team + "_CAPITAL")) \
-            - len(new_board.find_all_matching(lambda p, t: t == enemy_team or t == enemy_team + "_CAPITAL")) \
-            + (10 if capital_captured else 0))
+    # Fifth Heuristic: We should minimize enemy territory.
+    score -= 1 * len(enemy_territory)
+
+    return score
+
+def find_best_move_for_word(board, team, word, word_freq, letters_to_pos):
+    """
+    Finds the best move (based on heuristic scores) for a given board; returns the move as well as it's score.
+    """
+    # Fancy implementation which looks at every way that a move can be constructed via a breadth first search.
+    word_letters = set(word)
+    our_territory = board.territory(team)
+
+    # The starting letters are letters in the word adjacent to our territory.
+    starting_letters = { adj: board.get_letter(adj)
+            for pos in our_territory for adj in cap.adjacent_positions(pos) if board.get_letter(adj) in word_letters }
+    starting_available = invert_map(starting_letters)
+
+    # The queue contains (partial action, remaining, available words).
+    visited = set([frozenset()])
+    queue = deque([(frozenset(), word_freq, starting_available)])
+    best_move = None
+    best_score = None
+
+    while queue:
+        action, remaining, available = queue.popleft()
+
+        # For each remaining letter, look through the available positions for the letter and add them to the queue.
+        valid_children = 0
+        for letter in remaining:
+            if letter not in available:
+                continue
+
+            # Create a new remaining count which removes the current letter.
+            new_remaining = dict(remaining)
+            new_remaining[letter] -= 1
+            if new_remaining[letter] == 0:
+                del new_remaining[letter]
+
+            # Iterate through each available position, appending _new_ positions.
+            for pos in available[letter]:
+                if pos in action:
+                    continue
+
+                valid_children += 1
+
+                new_action = action | frozenset([pos])
+                if new_action in visited:
+                    continue
+                visited.add(new_action)
+
+                new_available = copy.deepcopy(available)
+                for adj in cap.adjacent_positions(pos):
+                    pletter = board.get_letter(adj)
+                    if pletter is not None and pletter in new_remaining:
+                        if pletter in new_available:
+                            new_available[pletter].append(adj)
+                        else:
+                            new_available[pletter] = [adj]
+
+                queue.append((new_action, new_remaining, new_available))
+
+        # If no valid children, then this is a terminal state which we need to complete.
+        if valid_children == 0:
+            completed = complete_word(letters_to_pos, action, remaining)
+            score = score_board(board.use_tiles(completed, team)[0], team)
+            if best_move is None or score > best_score:
+                best_move, best_score = completed, score
+
+    return reorder_tiles(board, best_move, word), best_score
+
 
 class L3x1c0nHack3rAgent(cap.Agent):
+    """
+    A greedy (i.e., non-minimax) agent which focuses on the following objectives:
+    - Killing the enemy by claiming all territory.
+    - Claiming the enemy capital, in order to gain a free round.
+    - Protecting the local capital from adjacent + connected tiles.
+    - Maximize territory gain: i.e., maximize local territory.
+    - Minimizing letter-adjacency: i.e., minimize number of territory tiles that are adjacent to letter tiles.
+    - Minimizing enemy territory: i.e., minimize territory that the enemy holds.
+
+    The agent scans through all playable words on the board and tries many letter choices, choosing the one that
+    maximizes the resulting board state.
+    """
+
     def __init__(self):
         # No initialization required.
         pass
@@ -145,8 +220,7 @@ class L3x1c0nHack3rAgent(cap.Agent):
 
         # For each word playable on the board...
         best_move = None
-        best_word = None
-        best_move_stats = None
+        best_score = None
         possible_words = 0
         for word in state.dictionary:
             word_freq = frequency_map(word)
@@ -156,10 +230,8 @@ class L3x1c0nHack3rAgent(cap.Agent):
             possible_words += 1
 
             # Choose the tiles which maximize territory gain with this word...
-            move, stats = choose_tiles_maximizing_territory(state.board, state.turn, letters_to_pos, word, word_freq)
-            if best_move is None or best_move_stats < stats:
-                best_word = word
-                best_move = move
-                best_move_stats = stats
+            move, score = find_best_move_for_word(state.board, state.turn, word, word_freq, letters_to_pos)
+            if best_move is None or score > best_score:
+                best_move, best_score = move, score
 
         return best_move
